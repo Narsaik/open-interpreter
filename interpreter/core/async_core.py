@@ -18,6 +18,7 @@ from .core import OpenInterpreter
 
 last_start_time = 0
 
+SERVER_DEPENDENCIES_AVAILABLE = False
 try:
     import janus
     import uvicorn
@@ -33,8 +34,10 @@ try:
     )
     from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
     from starlette.status import HTTP_403_FORBIDDEN
-except:
+    SERVER_DEPENDENCIES_AVAILABLE = True
+except ImportError:
     # Server dependencies are not required by the main package.
+    # To use server features, install with: poetry install -E server
     pass
 
 
@@ -57,10 +60,31 @@ class AsyncInterpreter(OpenInterpreter):
         )
         self.acknowledged_outputs = []
 
-        self.server = Server(self)
+        # Only create server if dependencies are available
+        if SERVER_DEPENDENCIES_AVAILABLE:
+            self.server = Server(self)
+        else:
+            self._server = None
 
         # For the 01. This lets the OAI compatible server accumulate context before responding.
         self.context_mode = False
+
+    @property
+    def server(self):
+        """Lazy initialization of server with helpful error message."""
+        if not SERVER_DEPENDENCIES_AVAILABLE:
+            raise ImportError(
+                "Server dependencies are not installed. "
+                "To use server features, install with: poetry install -E server"
+            )
+        if not hasattr(self, '_server') or self._server is None:
+            self._server = Server(self)
+        return self._server
+
+    @server.setter
+    def server(self, value):
+        """Allow setting the server directly."""
+        self._server = value
 
     async def input(self, chunk):
         """
